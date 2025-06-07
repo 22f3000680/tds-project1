@@ -12,3 +12,10 @@ The resulting cleaned data is stored in cleaned-discourse.json and cleaned-conte
 
 ## Embedding
 Nomic Atlas API is used to embed text and images. This is stored in an SQLite Database. 
+
+## Notes for developer:
+- Base URLs for each source are: 
+    - https://tds.s-anand.net/#/ + whatever file name is there [PLEASE NOTE THAT WHEN SEARCHING YOU HAVE TO CREATE THIS]
+    - https://discourse.onlinedegree.iitm.ac.in + url part of the discourse json bit
+- In the database, store id, url (source+url/filename), text and the embedding.
+- Figure out where images fit in with all this.

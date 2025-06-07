@@ -1,76 +1,109 @@
-import sqlite3
-import json
-from tqdm import tqdm
-import requests
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "nomic",
+#   "chromadb",
+#   "tqdm",
+#   "requests",
+# ]
+# ///
+
 import os
+import json
+import requests
+import uuid
+import base64
+from nomic import atlas, embed
+import chromadb
+from chromadb.config import Settings
+from tqdm import tqdm
 
-"""
-TODO:
-- Change the model to either Jina or Nomic Atlas
-- Include the embedding for image also in cleaned-discourse.json
-- Add a column for image embedding in the SQLite database
-"""
+# --- Load data ---
+with open("cleaned-discourse.json") as f:
+    discourse_data = json.load(f)
 
-# Input files
-INPUT_FILES = ["website-chunks.json", "cleaned-discourse.json"]
-DB_FILE = "embeddings.db"
+with open("website-chunks.json") as f:
+    markdown_data = json.load(f)
 
-# Setup SQLite
-conn = sqlite3.connect(DB_FILE)
-c = conn.cursor()
-c.execute('''
-CREATE TABLE IF NOT EXISTS embeddings (
-    id TEXT PRIMARY KEY,
-    source TEXT,
-    url TEXT,
-    content TEXT,
-    embedding BLOB
-)
-''')
-conn.commit()
+# --- Setup ChromaDB ---
+client = chromadb.PersistentClient(path="./chroma_store", settings=Settings())
+collection = client.get_or_create_collection("tds_multimodal")
 
-# Function to get embedding
-def get_embedding(text, model="text-embedding-3-small", api_key=os.getenv("OPENAI_API_KEY")):
-    url = "https://aipipe.org/openai/v1/embeddings"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "input": text,
-        "model": model
-    }
+# --- Helper Functions ---
+def embed_text(text):
+    output = embed.text(
+        texts=[text],
+        model='nomic-embed-text-v1.5',
+        task_type='search_document'
+    )
+    return output['embeddings'][0]
 
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()  # Raise an error if the request failed
-    data = response.json()
-    return data["data"][0]["embedding"]
+def embed_image_from_base64(b64str):
+    try:
+        image_bytes = base64.b64decode(b64str)
+        output = embed.image(
+            images=[image_bytes],
+            model='nomic-embed-vision-v1.5'
+        )
+        return output['embeddings'][0]
+    except Exception as e:
+        print(f"Failed to embed base64 image: {e}")
+        return None
 
-# Process each file
-for file in INPUT_FILES:
-    with open(file) as f:
-        records = json.load(f)
+# --- Process Discourse Posts ---
+for post in tqdm(discourse_data, desc="Discourse posts"):
+    post_id = str(post["id"])
+    source_url = "https://discourse.onlinedegree.iitm.ac.in" + post["post_url"]
+    text = post.get("content", "")
+    images_b64 = post.get("image", [])
 
-    for rec in tqdm(records, desc=f"Embedding {file}"):
-        text = rec.get("content")
-        if not text:
-            continue
-        try:
-            embedding = get_embedding(text)
-            c.execute(
-                "INSERT OR REPLACE INTO embeddings (id, source, url, content, embedding) VALUES (?, ?, ?, ?, ?)",
-                (
-                    rec["id"],
-                    rec.get("filename") or rec.get("topic_slug", ""),
-                    rec.get("post_url", ""),
-                    text,
-                    json.dumps(embedding)
-                )
+    # Embed text
+    if text:
+        text_embedding = embed_text(text)
+        collection.add(
+            ids=[f"{post_id}-text"],
+            documents=[text],
+            embeddings=[text_embedding],
+            metadatas=[{
+                "post_id": post_id,
+                "source_url": source_url,
+                "type": "text"
+            }]
+        )
+
+    # Embed images from base64
+    for i, img_b64 in enumerate(images_b64):
+        emb = embed_image_from_base64(img_b64)
+        if emb:
+            collection.add(
+                ids=[f"{post_id}-img{i}"],
+                documents=[""],
+                embeddings=[emb],
+                metadatas=[{
+                    "post_id": post_id,
+                    "source_url": source_url,
+                    "type": "image",
+                    "position": i
+                }]
             )
-        except Exception as e:
-            print(f"Error with {rec['id']}: {e}")
 
-    conn.commit()
+# --- Process Markdown Files ---
+for doc in tqdm(markdown_data, desc="Markdown chunks"):
+    doc_id = doc["id"]
+    content = doc["content"]
+    filename = doc.get("filename", "")
+    text_embedding = embed_text(content)
 
-conn.close()
-print("Embeddings stored in", DB_FILE)
+    collection.add(
+        ids=[doc_id],
+        documents=[content],
+        embeddings=[text_embedding],
+        metadatas=[{
+            "post_id": doc_id,
+            "source_url": filename,
+            "type": "text",
+            "filename": filename
+        }]
+    )
+
+print("Done storing text and image embeddings into ChromaDB.")
