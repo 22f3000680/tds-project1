@@ -8,7 +8,6 @@
 
 import json
 import re
-import base64
 import requests
 from bs4 import BeautifulSoup
 
@@ -48,15 +47,6 @@ def extract_image_urls(content):
     a_urls = [a['href'] for a in soup.find_all('a') if a.has_attr('href') and a['href'].lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'))]
     return list(set(img_urls + a_urls))
 
-def encode_image_to_base64(url):
-    """Download image and encode in base64."""
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        return base64.b64encode(response.content).decode('utf-8')
-    except Exception as e:
-        print(f"Failed to encode image {url}: {e}")
-        return None
 
 def remove_html_tags(content):
     """Remove HTML tags from content, returning plain text."""
@@ -66,8 +56,7 @@ def process_chunk(chunk):
     """Process a single JSON chunk: extract image URLs, encode images, add 'image' key."""
     content = chunk.get("content", "")
     image_urls = extract_image_urls(content)
-    encoded_images = [encode_image_to_base64(url) for url in image_urls]
-    chunk["image"] = [img for img in encoded_images if img is not None]
+    chunk["image"] = image_urls
     chunk["content"] = remove_html_tags(content)
     return chunk
 
