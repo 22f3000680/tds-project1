@@ -5,9 +5,13 @@ python-dotenv
 langchain
 langchain-nomic
 langchain-pinecone
+langchain-openai
 jq
 unstructured
 tiktoken
 pinecone
 pandas
 numpy
+pillow
+google-genai
+beautifulsoup4
