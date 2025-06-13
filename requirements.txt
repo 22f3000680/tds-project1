@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+requests
+python-dotenv
+langchain
+langchain-nomic
+langchain-pinecone
+jq
+unstructured
+tiktoken
+pinecone
+pandas
+numpy

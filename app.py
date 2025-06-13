@@ -1,23 +1,10 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "nomic",
-#   "chromadb",
-#   "fastapi",
-#   "pydantic",
-#   "pillow",
-#   "uvicorn",
-#   "requests",
-# ]
-# ///
-
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import base64
 import io
-import chromadb
-from nomic import embed
+from langchain_nomic import NomicEmbeddings
+import pinecone
 from PIL import Image
 import requests
 import os
@@ -25,16 +12,12 @@ from collections import defaultdict
 
 app = FastAPI()
 
-# ChromaDB setup
-client = chromadb.PersistentClient(path="./chroma_store")
-collection = client.get_collection("tds_multimodal")
-
-# OpenAI setup
+# OpenAI key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 class QueryRequest(BaseModel):
     question: str
-    image: str = None
+    image: Optional[str] = None
 
 class Link(BaseModel):
     url: str
@@ -47,11 +30,6 @@ class QueryResponse(BaseModel):
 @app.post("/api/", response_model=QueryResponse)
 async def query_rag(req: QueryRequest):
     # Step 1: Embed the question
-    question_embedding = embed.text(
-        texts=[req.question],
-        model="nomic-embed-text-v1.5",
-        task_type="search_query"
-    )["embeddings"][0]
 
     # Step 2: Embed the image if provided
     image_embedding = None
@@ -62,69 +40,26 @@ async def query_rag(req: QueryRequest):
             buffer = io.BytesIO()
             image.save(buffer, format="JPEG")
             buffer.seek(0)
-            image_embedding = embed.image(
-                images=[buffer.read()],
-                model="nomic-embed-vision-v1.5"
-            )["embeddings"][0]
+            #embed image
         except Exception as e:
             print(f"Image embedding failed: {e}")
 
-    # Step 3: Query ChromaDB
-    query_embeddings = [question_embedding]
-    if image_embedding:
-        query_embeddings.append(image_embedding)
+    # Step 3: Dense retrieval (ChromaDB)
+    #get the query together nicely, maybe use gemini to describe the image
 
-    results = collection.query(
-        query_embeddings=query_embeddings,
-        n_results=10
-    )
+    #query the pinecone db after connecting to it before this function
 
-    # Step 4: Merge contexts by post_id
-    context_by_post = defaultdict(lambda: {"content": [], "url": ""})
-    for docs, metas in zip(results["documents"], results["metadatas"]):
-        for doc, meta in zip(docs, metas):
-            if not doc.strip():
-                continue  # skip empty docs
-            post_id = meta.get("post_id")
-            if not post_id:
-                continue
-            context_by_post[post_id]["content"].append(doc)
-            if "source_url" in meta:
-                context_by_post[post_id]["url"] = meta["source_url"]
+    
+    prompt_context = []
+    for doc_id, entry in results:
+        url = entry["url"]
+        prompt_context.append(f"[Source: {url}]\n{entry['content'].strip()}")
 
-    # Sort by relevance using order in results["ids"] (same as relevance order)
-    seen = set()
-    sorted_contexts = []
-    for ids in results["ids"]:
-        for pid in ids:
-            base_pid = pid.split("-")[0]
-            if base_pid not in seen:
-                seen.add(base_pid)
-                sorted_contexts.append(base_pid)
-
-    # Step 5: Build context and links (top 2 only)
-    contexts = []
-    links = []
-    for post_id in sorted_contexts:
-        content_data = context_by_post[post_id]
-        if not content_data["content"] or not content_data["url"]:
-            continue  # skip entries with no text or link
-
-        context = "\n".join(content_data["content"])
-        url = content_data["url"]
-        if url.endswith(".md"):
-            url = "https://tds.s-anand.net/#/" + url[:-3]
-        contexts.append(context)
-        links.append({
-            "url": url,
-            "text": context[:150]
-        })
-        if len(contexts) == 2:
-            break
-
-    # Step 6: Use OpenAI to answer the question using context
-    context_str = "\n---\n".join(contexts)
-    prompt = f"Answer the question using the following context:\n\n{context_str}\n\nQuestion: {req.question}\nAnswer:"
+    context_str = "\n---\n".join(prompt_context)
+    final_prompt = [
+        {"role": "system", "content": "You're a helpful TDS course assistant."},
+        {"role": "user", "content": f"Context:\n\n{prompt_context}\n\nQuestion: {req.question}\n\nAnswer:"}
+    ]
 
     response = requests.post(
         "https://aipipe.org/openai/v1/chat/completions",
@@ -134,15 +69,19 @@ async def query_rag(req: QueryRequest):
         },
         json={
             "model": "gpt-4o-mini",
-            "messages": [{"role": "user", "content": prompt}]
+            "messages": final_prompt
         }
     )
     response.raise_for_status()
     answer = response.json()["choices"][0]["message"]["content"].strip()
 
-    return QueryResponse(answer=answer, links=links)
+    links = []
+    for doc_id, entry in results:
+        url = entry["url"]
+        links.append(Link(url=url, text=entry["content"].strip()[:150]))
 
+    return QueryResponse(answer=answer, links=links)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, port = 8000)
+    uvicorn.run(app, port=8000)
