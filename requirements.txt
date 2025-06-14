@@ -6,6 +6,8 @@ langchain
 langchain-nomic
 langchain-pinecone
 langchain-openai
+langchain_community
+nltk
 jq
 unstructured
 tiktoken
@@ -15,3 +17,5 @@ numpy
 pillow
 google-genai
 beautifulsoup4
+scikit-learn
+rank_bm25
