@@ -18,6 +18,8 @@ RUN python -m nltk.downloader punkt
 
 # Copy the application code
 COPY ./api ./api
+COPY cleaned-discourse.json ./api/
+COPY cleaned-content.json ./api/
 
 # Expose the port (optional, for documentation)
 EXPOSE 10000
