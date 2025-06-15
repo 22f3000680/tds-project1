@@ -3,7 +3,6 @@ uvicorn
 requests
 python-dotenv
 langchain
-langchain-nomic
 langchain-pinecone
 langchain-openai
 langchain_community
@@ -12,9 +11,7 @@ jq
 unstructured
 tiktoken
 pinecone
-pandas
 numpy
-pillow
 google-genai
 beautifulsoup4
 scikit-learn

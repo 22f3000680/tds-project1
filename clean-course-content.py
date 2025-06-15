@@ -38,5 +38,5 @@ for chunk in website_chunks:
         cleaned_content = clean_text_pipeline(original_content)
         chunk['content'] = cleaned_content
 
-with open("cleaned-content.json", "w") as file:
+with open("api/cleaned-content.json", "w") as file:
     json.dump(website_chunks, file, indent=2)

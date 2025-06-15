@@ -3,6 +3,8 @@ import time
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
+
 load_dotenv()
 cookie = os.getenv("DISCOURSE_COOKIE")
 
@@ -118,7 +120,7 @@ for post in good_posts:
     processed_posts.append(process_chunk(post))
 
 # Save to new file
-with open("cleaned-discourse.json", "w") as f:
+with open("api/cleaned-discourse.json", "w") as f:
     json.dump(processed_posts, f, indent=2)
 
 print(f"Converted {len(processed_posts)} posts.")

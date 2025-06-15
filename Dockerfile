@@ -18,8 +18,6 @@ RUN python -m nltk.downloader punkt
 
 # Copy the application code
 COPY ./api ./api
-COPY cleaned-discourse.json ./api/
-COPY cleaned-content.json ./api/
 
 # Expose the port (optional, for documentation)
 EXPOSE 10000
@@ -27,6 +25,4 @@ EXPOSE 10000
 # Use the PORT environment variable if set (for Render), else default to 10000
 ENV PORT=10000
 
-# Start the FastAPI app with Uvicorn
-# Note: If your app is in api/main.py, use "api.main:app"
 CMD ["python", "-m", "api.main"]

@@ -8,7 +8,6 @@ import io
 from collections import defaultdict
 import json
 from langchain_core.documents import Document
-from langchain_community.vectorstores import Pinecone
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -91,6 +90,10 @@ app.add_middleware(
     allow_methods = ["*"],
     allow_headers = ["*"]
 )
+
+@app.get("/")
+async def home():
+    return {"message": "Root endpoint. Use /api with query to ask questions!"}
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
