@@ -27,7 +27,10 @@ from rank_bm25 import BM25Okapi
 nltk.download('punkt_tab')
 nltk.download('punkt')
 
-with open("cleaned-discourse.json") as f:
+script_dir = os.path.dirname(os.path.abspath(__file__))
+json_path = os.path.join(script_dir, "cleaned-discourse.json")
+
+with open(json_path) as f:
     posts = json.load(f)
 
 # Group posts by topic_id
@@ -56,7 +59,10 @@ text_splitter = RecursiveCharacterTextSplitter(
 )
 docs = text_splitter.split_documents(documents)
 
-with open('cleaned-content.json') as f:
+script_dir = os.path.dirname(os.path.abspath(__file__))
+json_path = os.path.join(script_dir, "cleaned-content.json")
+
+with open(json_path) as f:
     webcont = json.load(f)
 
 webdocus = []
